@@ -1,32 +1,85 @@
-# React + TypeScript + Vite
+# OmniChat
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+Веб-клиент для отправки и получения **текстовых** сообщений в мессенджере
+через **GREEN-API**. Тестовое задание: MAX через GREEN-API
+(`https://green-api.com/max`), интерфейс по образцу `web.max.ru`, React,
+минимум функций, только текст.
 
-Currently, two official plugins are available:
+## Быстрый старт
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```bash
+npm install
+npm run dev      # http://localhost:5173
+npm run build    # tsc -b && vite build
+npm run lint     # oxlint
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+Перед первым запуском инстанс GREEN-API должен быть **авторизован** в личном
+кабинете — экран входа сообщит об этом и не пустит дальше.
+
+## Возможности
+
+- подключение к GREEN-API по `idInstance` и `apiTokenInstance`;
+- список чатов, поиск и папки «Все» / «Новые» со счётчиками непрочитанных;
+- создание чата по номеру телефона;
+- отправка и получение текстовых сообщений, статусы доставки и повтор при ошибке;
+- светлая и тёмная темы, панель смайлов.
+
+## Ограничения
+
+- Поддерживаются только текстовые сообщения. Нет отправки медиа,
+  редактирования, пересылки, реакций и групповых функций.
+- При открытии чата загружаются последние 50 сообщений; поиск по истории и
+  загрузка более старых сообщений не предусмотрены.
+- Неподдерживаемые типы входящих уведомлений (`imageMessage`, `audioMessage`
+  и другие) показываются в чате системной пометкой, а не теряются.
+- Длина сообщения ограничена клиентом: 4096 символов (лимит `SendMessage`).
+- `checkAccount` ограничивает частоту — при частых проверках API возвращает
+  «limit reached», окно предлагает повторить позже.
+- `notAuthorized`-инстанс примет `sendMessage` в очередь (до 24 часов), но
+  доставки не будет — экран входа предупреждает об этом заранее.
+
+## Дизайн
+
+- **Палитра** взята из брендбука MAX: `#471AFF`, `#6E1AFF`, `#0D001A`,
+  `#FFFFFF`. Остальные оттенки — производные от них.
+- **Тёмная тема по умолчанию**, как у MAX; светлая доступна и сохраняется.
+- **Токены тем** описаны в [`src/index.css`](src/index.css); переключение —
+  атрибут `<html data-theme>`, который ставится до первой отрисовки
+  ([`src/main.tsx`](src/main.tsx)).
+- **Мягкие скругления** (карточка чата — 20px, поле ввода и панель смайлов —
+  24px, кнопки — круг) вынесены в токены `--radius-*`.
+- **Компоненты** — собственные, без сторонней UI-библиотеки.
+
+## Структура
+
+```
+src/
+  App.tsx                  состояние приложения и сборка экранов
+  components/              интерфейс: вход, список чатов, лента, ввод, окна
+    icons/                 значки: интерфейс, типы вложений, статусы
+  hooks/                   состояние и работа с API: чаты, отправка, polling
+  lib/
+    greenApi/              клиент GREEN-API: транспорт, методы, ошибки
+    types.ts               контракт данных
+    format.ts              время, «Сегодня / Вчера»
+    theme.ts               чтение, применение и сохранение темы
+    emoji.ts               категории и поиск смайлов
+    chatFilter.ts          папки и поиск по списку чатов
+  index.css                токены, сброс, общие элементы
+  styles.css               стили компонентов
+```
+
+Компоненты не знают про API: `App` владеет состоянием и передаёт действия
+колбэками, а все адреса и форматы запросов собраны в `src/lib/greenApi/`.
+
+## Сценарий
+
+1. Ввести `idInstance` и `apiTokenInstance` → «Подключиться»: форма зовёт
+   `getStateInstance` и пускает только `authorized`; после входа список чатов
+   подтягивается методом `getChats`.
+2. Открыть чат из списка → `getChatHistory` подтягивает последние 50 сообщений.
+3. «Новый чат» → номер → `checkAccount` → чат создан, можно писать.
+4. Отправить текст → статус «доставлено» после ответа API.
+5. Получатель отвечает в мессенджере → уведомление приходит по long polling и
+   появляется в ленте.
