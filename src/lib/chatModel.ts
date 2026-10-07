@@ -38,21 +38,42 @@ export function messageFromJournal(item: JournalMessage): Message | null {
 
   const text = item.textMessage?.trim() || item.caption?.trim() || ''
   const deleted = Boolean(item.isDeleted)
-
   const isReaction = item.typeMessage === 'reactionMessage'
 
+  if (deleted) {
+    return {
+      id: item.idMessage ?? `${item.chatId}-${item.timestamp}`,
+      text: 'Сообщение удалено',
+      at: item.timestamp * 1000,
+      outgoing: item.type === 'outgoing',
+      kind: 'system',
+      typeMessage: undefined,
+      status: 'sent',
+    }
+  }
+
+  if (text) {
+    return {
+      id: item.idMessage ?? `${item.chatId}-${item.timestamp}`,
+      text,
+      at: item.timestamp * 1000,
+      outgoing: item.type === 'outgoing',
+      kind: 'text',
+      typeMessage: undefined,
+      status: 'sent',
+    }
+  }
+
+  // Реакция или другой тип — системная пометка
   return {
     id: item.idMessage ?? `${item.chatId}-${item.timestamp}`,
-    text:
-      deleted
-        ? 'Сообщение удалено'
-        : text || isReaction
-          ? 'Реакция'
-          : text || item.typeMessage || 'Сообщение без текста',
+    text: isReaction
+      ? 'Реакция'
+      : item.typeMessage || 'Сообщение без текста',
     at: item.timestamp * 1000,
     outgoing: item.type === 'outgoing',
-    kind: !text && !deleted && !isReaction ? 'system' : 'text',
-    typeMessage: !text && !deleted && !isReaction ? item.typeMessage : undefined,
+    kind: 'system',
+    typeMessage: isReaction ? undefined : item.typeMessage,
     status: 'sent',
   }
 }
@@ -92,22 +113,10 @@ export function parseNotification(body: WebhookBody): ParsedNotification | null 
   if (body.typeWebhook !== 'incomingMessageReceived') return null
 
   const type = body.messageData?.typeMessage
+  if (type !== 'textMessage') return null
 
-  let text: string
-  let kind: Message['kind'] = 'text'
-  let typeName: string | undefined
-
-  if (type === 'textMessage') {
-    text = body.messageData?.textMessageData?.textMessage ?? ''
-    if (!text.trim()) return null
-  } else if (type === 'reactionMessage') {
-    text = body.messageData?.reactionMessageData?.emoji ?? ''
-    if (!text.trim()) text = type
-  } else {
-    text = type ?? 'Сообщение без текста'
-    typeName = type
-    kind = 'system'
-  }
+  const text = body.messageData?.textMessageData?.textMessage ?? ''
+  if (!text.trim()) return null
 
   return {
     chatId: sender.chatId,
@@ -116,8 +125,8 @@ export function parseNotification(body: WebhookBody): ParsedNotification | null 
       text,
       at: (body.timestamp ?? Math.floor(Date.now() / 1000)) * 1000,
       outgoing: false,
-      kind,
-      typeMessage: typeName,
+      kind: 'text',
+      typeMessage: undefined,
       status: 'sent',
     },
     title:
